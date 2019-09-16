@@ -1,0 +1,26 @@
+[package]
+name = "wlgreet"
+version = "0.1.0"
+authors = ["Kenny Levinsen <kl@kl.wtf>"]
+edition = "2018"
+
+[profile.release]
+lto = "fat"
+
+[features]
+damage_debug = []
+
+[dependencies]
+smithay-client-toolkit = "0.6.4"
+rusttype = "0.7"
+chrono = "0.4"
+nix = "0.15"
+memmap = "0.7"
+os_pipe = "0.8"
+wayland-client = { version = "0.23", features = ["dlopen"] }
+wayland-protocols = { version = "0.23", features = ["client", "unstable_protocols"] }
+lazy_static = "1.4"
+serde_json = "1.0"
+serde_yaml = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+greet_proto = { git = "https://git.sr.ht/~kennylevinsen/greetd" }
