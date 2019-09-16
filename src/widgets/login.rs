@@ -102,8 +102,8 @@ fn login(username: &str, password: &str, command: Vec<String>, env: HashMap<Stri
     let resp = Response::from_slice(&resp_buf)?;
 
     match resp {
-        Response::LoginSuccess => Ok(()),
-        Response::LoginFailure => Err(std::io::Error::new(io::ErrorKind::Other, "authentication failed").into())
+        Response::Success => Ok(()),
+        Response::LoginError { description } => Err(std::io::Error::new(io::ErrorKind::Other, format!("login error: {}", description)).into())
     }
 }
 
