@@ -310,12 +310,6 @@ impl App {
         Ok(())
     }
 
-    pub fn toggle_visible(&mut self) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.visible = !inner.visible;
-        inner.outputs_changed();
-    }
-
     pub fn cmd_queue(&self) -> Arc<Mutex<VecDeque<Cmd>>> {
         self.cmd_queue.clone()
     }

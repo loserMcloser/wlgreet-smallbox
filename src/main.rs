@@ -1,9 +1,8 @@
 use std::default::Default;
 use std::env;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::os::unix::io::AsRawFd;
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::mpsc::channel;
 
 use nix::poll::{poll, PollFd, PollFlags};
@@ -24,8 +23,6 @@ use cmd::Cmd;
 
 enum Mode {
     Start,
-    StartOrKill,
-    ToggleVisible,
     PrintConfig(bool),
 }
 
@@ -63,8 +60,6 @@ fn main() {
         1 => Mode::Start,
         2 => match args[1].as_str() {
             "start" => Mode::Start,
-            "start-or-kill" => Mode::StartOrKill,
-            "toggle-visible" => Mode::ToggleVisible,
             "print-config" => Mode::PrintConfig(!is_yaml),
             "print-config-json" => Mode::PrintConfig(true),
             "print-config-yaml" => Mode::PrintConfig(false),
@@ -80,26 +75,7 @@ fn main() {
     };
 
     match mode {
-        Mode::ToggleVisible => {
-            if let Ok(mut socket) = UnixStream::connect(socket_path.clone()) {
-                socket.write_all(b"toggle_visible\n").unwrap();
-                return;
-            };
-            eprintln!("wldash is not running");
-            std::process::exit(1);
-        }
-        Mode::StartOrKill => {
-            if let Ok(mut socket) = UnixStream::connect(socket_path.clone()) {
-                socket.write_all(b"kill\n").unwrap();
-                return;
-            };
-        }
-        Mode::Start => {
-            if let Ok(_) = UnixStream::connect(socket_path.clone()) {
-                eprintln!("wldash is already running");
-                std::process::exit(1);
-            };
-        }
+        Mode::Start => (),
         Mode::PrintConfig(json) => {
             if json {
                 println!("{}", serde_json::to_string_pretty(&config).unwrap());
@@ -109,9 +85,6 @@ fn main() {
             std::process::exit(0);
         }
     }
-
-    let _ = std::fs::remove_file(socket_path.clone());
-    let listener = UnixListener::bind(socket_path.clone()).unwrap();
 
     let output_mode = match config.output_mode {
         config::OutputMode::All => OutputMode::All,
@@ -136,7 +109,6 @@ fn main() {
     app.set_widget(widget).unwrap();
 
     let (mut rx_pipe, mut tx_pipe) = pipe().unwrap();
-    let ipc_pipe = tx_pipe.try_clone().unwrap();
 
     let worker_queue = app.cmd_queue();
     let _ = std::thread::Builder::new()
@@ -145,42 +117,6 @@ fn main() {
             let cmd = rx_draw.recv().unwrap();
             worker_queue.lock().unwrap().push_back(cmd);
             tx_pipe.write_all(&[0x1]).unwrap();
-        });
-
-    let ipc_queue = app.cmd_queue();
-    let _ = std::thread::Builder::new()
-        .name("ipc_server".to_string())
-        .spawn(move || loop {
-            for stream in listener.incoming() {
-                match stream {
-                    Ok(stream) => {
-                        let client_queue = ipc_queue.clone();
-                        let mut client_pipe = ipc_pipe.try_clone().unwrap();
-                        let _ = std::thread::Builder::new()
-                            .name("ipc_client".to_string())
-                            .spawn(move || {
-                                let r = BufReader::new(stream);
-                                for line in r.lines() {
-                                    match line {
-                                        Ok(v) => match v.as_str() {
-                                            "kill" => {
-                                                client_queue.lock().unwrap().push_back(Cmd::Exit)
-                                            }
-                                            "toggle_visible" => client_queue
-                                                .lock()
-                                                .unwrap()
-                                                .push_back(Cmd::ToggleVisible),
-                                            v => eprintln!("unknown command: {}", v),
-                                        },
-                                        Err(_) => return,
-                                    }
-                                    client_pipe.write_all(&[0x1]).unwrap();
-                                }
-                            });
-                    }
-                    Err(_) => break,
-                }
-            }
         });
 
     let mut fds = [
@@ -220,9 +156,6 @@ fn main() {
                     app.get_widget()
                         .keyboard_input(key, modifiers_state, key_state, interpreted);
                     q.lock().unwrap().push_back(Cmd::Draw);
-                }
-                Cmd::ToggleVisible => {
-                    app.toggle_visible();
                 }
                 Cmd::Exit => {
                     let _ = std::fs::remove_file(socket_path);

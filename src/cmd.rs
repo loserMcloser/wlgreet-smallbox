@@ -4,7 +4,6 @@ pub enum Cmd {
     Exit,
     Draw,
     ForceDraw,
-    ToggleVisible,
     MouseClick {
         btn: u32,
         pos: (u32, u32),

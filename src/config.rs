@@ -68,7 +68,7 @@ pub enum OutputMode {
 
 impl Default for OutputMode {
     fn default() -> Self {
-        OutputMode::Active
+        OutputMode::All
     }
 }
 

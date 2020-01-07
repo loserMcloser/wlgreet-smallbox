@@ -90,6 +90,7 @@ fn login(username: &str, password: &str, command: Vec<String>, env: HashMap<Stri
     req.scramble();
     match request {
         Request::Login { mut password, .. } => password.scramble(),
+        _ => (),
     }
 
     // Read response
@@ -103,7 +104,7 @@ fn login(username: &str, password: &str, command: Vec<String>, env: HashMap<Stri
 
     match resp {
         Response::Success => Ok(()),
-        Response::LoginError { description } => Err(std::io::Error::new(io::ErrorKind::Other, format!("login error: {}", description)).into())
+        Response::Failure(err) => Err(std::io::Error::new(io::ErrorKind::Other, format!("login error: {:?}", err)).into())
     }
 }
 
@@ -115,7 +116,7 @@ impl Widget for Login {
     fn draw(
         &mut self,
         ctx: &mut DrawContext,
-        pos: (u32, u32),
+        _pos: (u32, u32),
     ) -> Result<DrawReport, ::std::io::Error> {
         let (width, height) = self.size();
         if !self.dirty && !ctx.force {
