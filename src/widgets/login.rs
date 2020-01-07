@@ -4,7 +4,6 @@ use crate::widget::{DrawContext, DrawReport, KeyState, ModifiersState, Widget};
 
 use std::io;
 use std::io::{Write, Read};
-use std::collections::HashMap;
 use std::env;
 use std::os::unix::net::UnixStream;
 
@@ -70,11 +69,11 @@ impl Login {
     }
 }
 
-fn login(username: &str, password: &str, command: Vec<String>, env: HashMap<String, String>) -> Result<(), Box<dyn std::error::Error>> {
+fn login(username: &str, password: &str, cmd: Vec<String>, env: Vec<String>) -> Result<(), Box<dyn std::error::Error>> {
     let request = Request::Login{
         username: username.to_string(),
         password: password.to_string(),
-        command,
+        cmd,
         env,
     };
 
@@ -203,13 +202,14 @@ impl Widget for Login {
                 }
                 Mode::EditingPassword => {
                     if self.password.len() > 0 {
-                        let mut env = HashMap::new();
-                        env.insert("XDG_SESSION_TYPE".to_string(), "wayland".to_string());
-                        env.insert("XDG_SESSION_DESKTOP".to_string(), "sway".to_string());
                         let res = login(&self.username,
                             &self.password,
                             vec!["sway".to_string()],
-                            env
+                            vec![
+                                "XDG_SESSION_TYPE=wayland".to_string(),
+                                "XDG_SESSION_DESKTOP=sway".to_string(),
+                                "XDG_CURRENT_DESKTOP=sway".to_string()
+                            ]
                         );
                         self.username.scramble();
                         self.password.scramble();

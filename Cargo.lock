@@ -82,7 +82,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "greet_proto"
 version = "0.2.0"
-source = "git+https://git.sr.ht/~kennylevinsen/greetd#252ab3738a92ac0c94dd239acd5d62926a8fcbcc"
+source = "git+https://git.sr.ht/~kennylevinsen/greetd#c8708b93383cf9c4495cc9a32608a29f0e32528a"
 dependencies = [
  "byteorder 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
