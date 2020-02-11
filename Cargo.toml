@@ -23,4 +23,4 @@ lazy_static = "1.4"
 serde_json = "1.0"
 serde_yaml = "0.8"
 serde = { version = "1.0", features = ["derive"] }
-greet_proto = { git = "https://git.sr.ht/~kennylevinsen/greetd" }
+greet_proto = { git = "https://git.sr.ht/~kennylevinsen/greetd", features = ["sync-codec"] }

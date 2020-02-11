@@ -39,19 +39,20 @@ fn main() {
         },
     };
 
-    let (is_yaml, config): (bool, config::Config) = match File::open(config_home.clone() + "/config.yaml") {
-        Ok(f) => {
-            let reader = BufReader::new(f);
-            (true, serde_yaml::from_reader(reader).unwrap())
-        }
-        Err(_) =>  match File::open(config_home + "/config.json") {
+    let (is_yaml, config): (bool, config::Config) =
+        match File::open(config_home.clone() + "/config.yaml") {
             Ok(f) => {
                 let reader = BufReader::new(f);
-                (false, serde_json::from_reader(reader).unwrap())
+                (true, serde_yaml::from_reader(reader).unwrap())
             }
-            Err(_) => (true, Default::default()),
-        }
-    };
+            Err(_) => match File::open(config_home + "/config.json") {
+                Ok(f) => {
+                    let reader = BufReader::new(f);
+                    (false, serde_json::from_reader(reader).unwrap())
+                }
+                Err(_) => (true, Default::default()),
+            },
+        };
 
     let scale = config.scale;
 
