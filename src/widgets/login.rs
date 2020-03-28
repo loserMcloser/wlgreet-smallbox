@@ -39,38 +39,51 @@ impl Scrambler for String {
 pub struct Login {
     question: String,
     answer: String,
+    command: String,
     mode: Option<AuthMessageType>,
-    error: Option<String>,
+    error: String,
     border: Color,
     headline_font: Font,
     prompt_font: Font,
     dirty: bool,
     reset_border: bool,
-    stream: UnixStream,
+    stream: Option<UnixStream>,
 }
 
 impl Login {
-    pub fn new() -> Box<Login> {
+    pub fn new(cmd: String) -> Box<Login> {
         let mut l = Login {
             question: String::new(),
             answer: String::new(),
+            command: cmd,
             mode: None,
-            error: None,
+            error: "".to_string(),
             headline_font: Font::new(&DEJAVUSANS_MONO, 72.0),
             prompt_font: Font::new(&DEJAVUSANS_MONO, 32.0),
             border: Color::new(1.0, 1.0, 1.0, 1.0),
             dirty: false,
             reset_border: false,
-            stream: UnixStream::connect(env::var("GREETD_SOCK").expect("GREETD_SOCK not set"))
-                .expect("Unable to connect to greetd"),
+            stream: None,
         };
         l.reset();
         Box::new(l)
     }
 
     fn reset(&mut self) {
-        self.question = "login:".to_string();
+        self.question = "username:".to_string();
         self.answer = String::new();
+    }
+
+    fn cancel(&mut self) -> Result<(), Box<dyn Error>> {
+        let stream = match self.stream {
+            Some(ref mut s) => s,
+            None => {
+                self.stream = Some(UnixStream::connect(env::var("GREETD_SOCK").expect("GREETD_SOCK not set"))?);
+                self.stream.as_mut().unwrap()
+            }
+        };
+        Request::CancelSession.write_to(stream)?;
+        Ok(())
     }
 
     fn communicate(&mut self) -> Result<(), Box<dyn Error>> {
@@ -82,9 +95,16 @@ impl Login {
                 response: Some(self.answer.to_string()),
             },
         };
-        req.write_to(&mut self.stream)?;
+        let stream = match self.stream {
+            Some(ref mut s) => s,
+            None => {
+                self.stream = Some(UnixStream::connect(env::var("GREETD_SOCK").expect("GREETD_SOCK not set"))?);
+                self.stream.as_mut().unwrap()
+            }
+        };
+        req.write_to(stream)?;
 
-        match Response::read_from(&mut self.stream)? {
+        match Response::read_from(stream)? {
             Response::AuthMessage {
                 auth_message,
                 auth_message_type,
@@ -95,11 +115,11 @@ impl Login {
             Response::Success => {
                 Request::StartSession {
                     env: vec![],
-                    cmd: vec!["sway-run -d 2>/tmp/swaystuff".to_string()],
+                    cmd: vec![self.command.to_string()],
                 }
-                .write_to(&mut self.stream)?;
+                .write_to(stream)?;
 
-                match Response::read_from(&mut self.stream)? {
+                match Response::read_from(stream)? {
                     Response::Success => std::process::exit(0),
                     Response::Error {
                         error_type,
@@ -118,7 +138,7 @@ impl Login {
                 error_type,
                 description,
             } => {
-                Request::CancelSession.write_to(&mut self.stream)?;
+                Request::CancelSession.write_to(stream)?;
                 match error_type {
                     ErrorType::AuthError => return Err("Login failed".into()),
                     ErrorType::Error => {
@@ -189,12 +209,12 @@ impl Widget for Login {
             _ => (),
         }
 
-        if let Some(e) = &self.error {
+        if self.error.len() > 0 {
             self.prompt_font.auto_draw_text(
                 &mut buf.offset((256, 64))?,
                 &ctx.bg,
                 &Color::new(1.0, 1.0, 1.0, 1.0),
-                e,
+                &self.error,
             )?;
         }
 
@@ -214,32 +234,61 @@ impl Widget for Login {
     fn keyboard_input(
         &mut self,
         key: u32,
-        _: ModifiersState,
+        modifiers: ModifiersState,
         _: KeyState,
         interpreted: Option<String>,
     ) {
         match key {
+            keysyms::XKB_KEY_u if modifiers.ctrl => {
+                if self.mode.is_some() {
+                    self.cancel().expect("unable to cancel");
+                    self.mode = None;
+                }
+                self.answer.clear();
+                self.error.clear();
+                self.reset();
+                self.dirty = true;
+            }
+            keysyms::XKB_KEY_c if modifiers.ctrl => {
+                if self.mode.is_some() {
+                    self.cancel().expect("unable to cancel");
+                    self.mode = None;
+                }
+                self.answer.clear();
+                self.error.clear();
+                self.reset();
+                self.dirty = true;
+            }
             keysyms::XKB_KEY_BackSpace => {
                 self.answer.truncate(self.answer.len().saturating_sub(1));
                 self.dirty = true;
-                return;
             }
-            keysyms::XKB_KEY_Return => {
-                let res = self.communicate();
-                self.dirty = true;
-                self.answer.clear();
-                self.error = None;
-                if let Err(e) = res {
-                    self.error = Some(format!("{}", e));
+            keysyms::XKB_KEY_Return => match self.answer.chars().next() {
+                Some('!') => {
+                    self.error = format!("Command set to: {}", self.answer[1..].to_string()).to_string();
+                    self.command = self.answer[1..].to_string();
+                    self.answer.clear();
+                    self.dirty = true;
                     self.mode = None;
-                    return;
+                }
+                _ => {
+                    let res = self.communicate();
+                    self.dirty = true;
+                    self.answer.clear();
+                    self.error.clear();
+                    if let Err(e) = res {
+                        self.error = format!("{}", e);
+                        self.mode = None;
+                        if let Err(e) = self.cancel() {
+                            self.error = format!("{}", e);
+                        };
+                    }
                 }
             }
             _ => match interpreted {
                 Some(v) => {
                     self.answer += &v;
                     self.dirty = true;
-                    return;
                 }
                 None => {}
             },

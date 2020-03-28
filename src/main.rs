@@ -1,7 +1,4 @@
-use std::default::Default;
-use std::env;
-use std::fs::File;
-use std::io::{BufReader, Read, Write};
+use std::io::{ Read, Write};
 use std::os::unix::io::AsRawFd;
 use std::sync::mpsc::channel;
 
@@ -18,96 +15,15 @@ mod draw;
 mod widget;
 mod widgets;
 
-use app::{App, OutputMode};
+use app::{App};
 use cmd::Cmd;
 
-enum Mode {
-    Start,
-    PrintConfig(bool),
-}
-
 fn main() {
-    let socket_path = match env::var("XDG_RUNTIME_DIR") {
-        Ok(dir) => dir + "/wlgreet",
-        Err(_) => "/tmp/wlgreet".to_string(),
-    };
-    let config_home = match env::var("XDG_CONFIG_HOME") {
-        Ok(dir) => dir + "/wlgreet",
-        Err(_) => match env::var("HOME") {
-            Ok(home) => home + "/.config/wlgreet",
-            Err(_) => panic!("unable to find user folder"),
-        },
-    };
-
-    let (is_yaml, config): (bool, config::Config) =
-        match File::open(config_home.clone() + "/config.yaml") {
-            Ok(f) => {
-                let reader = BufReader::new(f);
-                (true, serde_yaml::from_reader(reader).unwrap())
-            }
-            Err(_) => match File::open(config_home + "/config.json") {
-                Ok(f) => {
-                    let reader = BufReader::new(f);
-                    (false, serde_json::from_reader(reader).unwrap())
-                }
-                Err(_) => (true, Default::default()),
-            },
-        };
-
-    let scale = config.scale;
-
-    let args: Vec<String> = env::args().collect();
-    let mode = match args.len() {
-        1 => Mode::Start,
-        2 => match args[1].as_str() {
-            "start" => Mode::Start,
-            "print-config" => Mode::PrintConfig(!is_yaml),
-            "print-config-json" => Mode::PrintConfig(true),
-            "print-config-yaml" => Mode::PrintConfig(false),
-            s => {
-                eprintln!("unsupported sub-command {}", s);
-                std::process::exit(1);
-            }
-        },
-        v => {
-            eprintln!("expected 0 or 1 arguments, got {}", v);
-            std::process::exit(1);
-        }
-    };
-
-    match mode {
-        Mode::Start => (),
-        Mode::PrintConfig(json) => {
-            if json {
-                println!("{}", serde_json::to_string_pretty(&config).unwrap());
-            } else {
-                println!("{}", serde_yaml::to_string(&config).unwrap());
-            }
-            std::process::exit(0);
-        }
-    }
-
-    let output_mode = match config.output_mode {
-        config::OutputMode::All => OutputMode::All,
-        config::OutputMode::Active => OutputMode::Active,
-    };
-
-    let background = config.background;
+    let config = config::read_config();
 
     let (tx_draw, rx_draw) = channel();
-    let tx_draw_mod = tx_draw.clone();
-    let (mod_tx, mod_rx) = channel();
-    std::thread::spawn(move || {
-        // Print, write to a file, or send to an HTTP server.
-        match config.widget.construct(tx_draw_mod) {
-            Some(w) => mod_tx.send(w).unwrap(),
-            None => panic!("no widget configured"),
-        }
-    });
-
-    let mut app = App::new(tx_draw, output_mode, background, scale);
-    let widget = mod_rx.recv().unwrap();
-    app.set_widget(widget).unwrap();
+    let mut app = App::new(tx_draw, config.clone());
+    app.set_widget(widgets::login::Login::new(config.command)).unwrap();
 
     let (mut rx_pipe, mut tx_pipe) = pipe().unwrap();
 
@@ -159,7 +75,6 @@ fn main() {
                     q.lock().unwrap().push_back(Cmd::Draw);
                 }
                 Cmd::Exit => {
-                    let _ = std::fs::remove_file(socket_path);
                     return;
                 }
             },

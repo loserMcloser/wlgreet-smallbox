@@ -17,14 +17,10 @@ use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
 use crate::buffer::Buffer;
 use crate::color::Color;
 use crate::widget::{DrawContext, Widget};
+use crate::config::{OutputMode, Config};
 
 use crate::cmd::Cmd;
 use crate::doublemempool::DoubleMemPool;
-
-pub enum OutputMode {
-    Active,
-    All,
-}
 
 struct AppInner {
     compositor: Option<wl_compositor::WlCompositor>,
@@ -198,12 +194,12 @@ impl AppInner {
 }
 
 pub struct App {
+    config: Config,
     pools: DoubleMemPool,
     display: Display,
     event_queue: EventQueue,
     cmd_queue: Arc<Mutex<VecDeque<Cmd>>>,
     widget: Option<Box<dyn Widget + Send>>,
-    bg: Color,
     inner: Arc<Mutex<AppInner>>,
     last_damage: Option<Vec<(i32, i32, i32, i32)>>,
     last_dim: (u32, u32),
@@ -258,14 +254,15 @@ impl App {
         }
 
         if force {
-            buf.memset(&self.bg);
+            buf.memset(&self.config.background);
         }
         let report = widget.draw(
             &mut DrawContext {
                 buf: &mut buf,
-                bg: &self.bg,
+                bg: &self.config.background,
                 time: &time,
                 force,
+                config: &self.config,
             },
             (0, 0),
         )?;
@@ -331,8 +328,8 @@ impl App {
         self.redraw(true)
     }
 
-    pub fn new(tx: Sender<Cmd>, output_mode: OutputMode, bg: Color, scale: u32) -> App {
-        let inner = Arc::new(Mutex::new(AppInner::new(tx.clone(), output_mode, scale)));
+    pub fn new(tx: Sender<Cmd>, config: Config) -> App {
+        let inner = Arc::new(Mutex::new(AppInner::new(tx.clone(), config.output_mode, config.scale)));
 
         //
         // Set up modules
@@ -416,6 +413,14 @@ impl App {
         // Keyboard processing
         //
         let kbd_clone = cmd_queue.clone();
+        let modifiers_state = Arc::new(Mutex::new(ModifiersState {
+            ctrl: false,
+            alt: false,
+            shift: false,
+            caps_lock: false,
+            logo: false,
+            num_lock: false,
+        }));
         map_keyboard_auto(&seat, move |event: KbEvent, _| match event {
             KbEvent::Key {
                 keysym,
@@ -424,23 +429,19 @@ impl App {
                 ..
             } => match state {
                 KeyState::Pressed => match keysym {
-                    keysyms::XKB_KEY_Escape => kbd_clone.lock().unwrap().push_back(Cmd::Exit),
+                    keysyms::XKB_KEY_c if modifiers_state.lock().unwrap().ctrl => {
+                        kbd_clone.lock().unwrap().push_back(Cmd::Exit)
+                    }
                     v => kbd_clone.lock().unwrap().push_back(Cmd::Keyboard {
                         key: v,
                         key_state: state,
-                        modifiers_state: ModifiersState {
-                            ctrl: false,
-                            alt: false,
-                            shift: false,
-                            caps_lock: false,
-                            logo: false,
-                            num_lock: false,
-                        },
+                        modifiers_state: modifiers_state.lock().unwrap().clone(),
                         interpreted: utf8,
                     }),
                 },
                 _ => (),
             },
+            KbEvent::Modifiers { modifiers } => *modifiers_state.lock().unwrap() = modifiers,
             _ => (),
         })
         .expect("Failed to map keyboard");
@@ -467,6 +468,7 @@ impl App {
         //
         // Cursor processing
         //
+        let scale = config.scale;
         let pointer_clone = cmd_queue.clone();
         seat.get_pointer(move |ptr| {
             let mut pos: (u32, u32) = (0, 0);
@@ -532,12 +534,12 @@ impl App {
         display.flush().unwrap();
 
         App {
+            config,
             display: display,
             event_queue: event_queue,
             cmd_queue: cmd_queue,
             pools: pools,
             widget: None,
-            bg: bg,
             inner: inner,
             last_damage: None,
             last_dim: (0, 0),
