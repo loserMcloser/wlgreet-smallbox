@@ -277,6 +277,7 @@ impl Widget for Login {
                     self.answer.clear();
                     self.error.clear();
                     if let Err(e) = res {
+                        self.reset();
                         self.error = format!("{}", e);
                         self.mode = None;
                         if let Err(e) = self.cancel() {
