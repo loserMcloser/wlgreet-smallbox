@@ -114,7 +114,6 @@ impl Login {
             }
             Response::Success => {
                 Request::StartSession {
-                    env: vec![],
                     cmd: vec![self.command.to_string()],
                 }
                 .write_to(stream)?;
