@@ -78,7 +78,9 @@ impl Login {
         let stream = match self.stream {
             Some(ref mut s) => s,
             None => {
-                self.stream = Some(UnixStream::connect(env::var("GREETD_SOCK").expect("GREETD_SOCK not set"))?);
+                self.stream = Some(UnixStream::connect(
+                    env::var("GREETD_SOCK").expect("GREETD_SOCK not set"),
+                )?);
                 self.stream.as_mut().unwrap()
             }
         };
@@ -98,7 +100,9 @@ impl Login {
         let stream = match self.stream {
             Some(ref mut s) => s,
             None => {
-                self.stream = Some(UnixStream::connect(env::var("GREETD_SOCK").expect("GREETD_SOCK not set"))?);
+                self.stream = Some(UnixStream::connect(
+                    env::var("GREETD_SOCK").expect("GREETD_SOCK not set"),
+                )?);
                 self.stream.as_mut().unwrap()
             }
         };
@@ -264,7 +268,8 @@ impl Widget for Login {
             }
             keysyms::XKB_KEY_Return => match self.answer.chars().next() {
                 Some('!') => {
-                    self.error = format!("Command set to: {}", self.answer[1..].to_string()).to_string();
+                    self.error =
+                        format!("Command set to: {}", self.answer[1..].to_string()).to_string();
                     self.command = self.answer[1..].to_string();
                     self.answer.clear();
                     self.dirty = true;
@@ -284,7 +289,7 @@ impl Widget for Login {
                         };
                     }
                 }
-            }
+            },
             _ => match interpreted {
                 Some(v) => {
                     self.answer += &v;

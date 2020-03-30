@@ -1,9 +1,9 @@
 use crate::color::Color;
+use getopts::Options;
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 use std::env;
 use std::fs::read_to_string;
-use getopts::Options;
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -38,7 +38,7 @@ pub struct Config {
     #[serde(default = "default_background")]
     pub background: Color,
     #[serde(default = "default_cmd")]
-    pub command: String
+    pub command: String,
 }
 
 impl Default for Config {

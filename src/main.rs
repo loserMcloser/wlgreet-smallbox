@@ -1,4 +1,4 @@
-use std::io::{ Read, Write};
+use std::io::{Read, Write};
 use std::os::unix::io::AsRawFd;
 use std::sync::mpsc::channel;
 
@@ -15,7 +15,7 @@ mod draw;
 mod widget;
 mod widgets;
 
-use app::{App};
+use app::App;
 use cmd::Cmd;
 
 fn main() {
@@ -23,7 +23,8 @@ fn main() {
 
     let (tx_draw, rx_draw) = channel();
     let mut app = App::new(tx_draw, config.clone());
-    app.set_widget(widgets::login::Login::new(config.command)).unwrap();
+    app.set_widget(widgets::login::Login::new(config.command))
+        .unwrap();
 
     let (mut rx_pipe, mut tx_pipe) = pipe().unwrap();
 

@@ -16,8 +16,8 @@ use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
 
 use crate::buffer::Buffer;
 use crate::color::Color;
+use crate::config::{Config, OutputMode};
 use crate::widget::{DrawContext, Widget};
-use crate::config::{OutputMode, Config};
 
 use crate::cmd::Cmd;
 use crate::doublemempool::DoubleMemPool;
@@ -329,7 +329,11 @@ impl App {
     }
 
     pub fn new(tx: Sender<Cmd>, config: Config) -> App {
-        let inner = Arc::new(Mutex::new(AppInner::new(tx.clone(), config.output_mode, config.scale)));
+        let inner = Arc::new(Mutex::new(AppInner::new(
+            tx.clone(),
+            config.output_mode,
+            config.scale,
+        )));
 
         //
         // Set up modules
