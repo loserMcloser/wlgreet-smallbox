@@ -8,7 +8,7 @@ use std::os::unix::net::UnixStream;
 
 use smithay_client_toolkit::keyboard::keysyms;
 
-use greet_proto::{codec::SyncCodec, AuthMessageType, ErrorType, Request, Response};
+use greetd_ipc::{codec::SyncCodec, AuthMessageType, ErrorType, Request, Response};
 
 pub trait Scrambler {
     fn scramble(&mut self);
