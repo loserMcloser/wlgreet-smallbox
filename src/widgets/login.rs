@@ -85,7 +85,17 @@ impl Login {
             }
         };
         Request::CancelSession.write_to(stream)?;
-        Ok(())
+        match Response::read_from(stream)? {
+            Response::AuthMessage { .. } => panic!("unexpected message"),
+            Response::Success => Ok(()),
+            Response::Error {
+                error_type,
+                description,
+            } => {
+                eprintln!("err: {:?}: {}", error_type, description);
+                std::process::exit(-1);
+            }
+        }
     }
 
     fn communicate(&mut self) -> Result<(), Box<dyn Error>> {
@@ -140,16 +150,13 @@ impl Login {
             Response::Error {
                 error_type,
                 description,
-            } => {
-                Request::CancelSession.write_to(stream)?;
-                match error_type {
-                    ErrorType::AuthError => return Err("Login failed".into()),
-                    ErrorType::Error => {
-                        eprintln!("err: {}", description);
-                        std::process::exit(-1);
-                    }
+            } => match error_type {
+                ErrorType::AuthError => return Err("Login failed".into()),
+                ErrorType::Error => {
+                    eprintln!("err: {}", description);
+                    std::process::exit(-1);
                 }
-            }
+            },
         }
         Ok(())
     }
