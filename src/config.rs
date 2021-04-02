@@ -27,6 +27,18 @@ fn default_background() -> Color {
 fn default_cmd() -> String {
     "".to_string()
 }
+fn default_headline() -> Color {
+    Color::new(1.0, 1.0, 1.0, 1.0)
+}
+fn default_prompt() -> Color {
+    Color::new(1.0, 1.0, 1.0, 1.0)
+}
+fn default_prompt_err() -> Color {
+    Color::new(1.0, 1.0, 1.0, 1.0)
+}
+fn default_border() -> Color {
+    Color::new(1.0, 1.0, 1.0, 1.0)
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +49,14 @@ pub struct Config {
     pub scale: u32,
     #[serde(default = "default_background")]
     pub background: Color,
+    #[serde(default = "default_headline")]
+    pub headline: Color,
+    #[serde(default = "default_prompt")]
+    pub prompt: Color,
+    #[serde(default = "default_prompt_err")]
+    pub prompt_err: Color,
+    #[serde(default = "default_border")]
+    pub border: Color,
     #[serde(default = "default_cmd")]
     pub command: String,
 }
@@ -47,6 +67,10 @@ impl Default for Config {
             output_mode: Default::default(),
             scale: 1,
             background: Color::new(0.0, 0.0, 0.0, 0.9),
+            headline: Color::new(1.0, 1.0, 1.0, 1.0),
+            prompt: Color::new(1.0, 1.0, 1.0, 1.0),
+            prompt_err: Color::new(1.0, 1.0, 1.0, 1.0),
+            border: Color::new(1.0, 1.0, 1.0, 1.0),
             command: "".to_string(),
         }
     }
@@ -66,7 +90,7 @@ pub fn read_config() -> Config {
     opts.optopt("e", "command", "command to run", "COMMAND");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
-        Err(f) => panic!(f.to_string()),
+        Err(f) => panic!("{}", f.to_string()),
     };
     if matches.opt_present("h") {
         print_usage(&program, opts);

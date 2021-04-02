@@ -1,4 +1,3 @@
-use crate::color::Color;
 use crate::draw::{draw_box, Font, DEJAVUSANS_MONO};
 use crate::widget::{DrawContext, DrawReport, KeyState, ModifiersState, Widget};
 
@@ -42,11 +41,9 @@ pub struct Login {
     command: String,
     mode: Option<AuthMessageType>,
     error: String,
-    border: Color,
     headline_font: Font,
     prompt_font: Font,
     dirty: bool,
-    reset_border: bool,
     stream: Option<UnixStream>,
 }
 
@@ -60,9 +57,7 @@ impl Login {
             error: "".to_string(),
             headline_font: Font::new(&DEJAVUSANS_MONO, 72.0),
             prompt_font: Font::new(&DEJAVUSANS_MONO, 32.0),
-            border: Color::new(1.0, 1.0, 1.0, 1.0),
             dirty: false,
-            reset_border: false,
             stream: None,
         };
         l.reset();
@@ -179,19 +174,19 @@ impl Widget for Login {
         self.dirty = false;
         let mut buf = ctx.buf.subdimensions((0, 0, width, height))?;
         buf.memset(&ctx.bg);
-        draw_box(&mut buf, &self.border, (width, height))?;
+        draw_box(&mut buf, &ctx.config.border, (width, height))?;
 
         self.headline_font.auto_draw_text(
             &mut buf.offset((32, 24))?,
             &ctx.bg,
-            &Color::new(1.0, 1.0, 1.0, 1.0),
+            &ctx.config.headline,
             "Login",
         )?;
 
         let (w, _) = self.prompt_font.auto_draw_text(
             &mut buf.offset((256, 24))?,
             &ctx.bg,
-            &Color::new(1.0, 1.0, 1.0, 1.0),
+            &ctx.config.prompt,
             &self.question,
         )?;
 
@@ -200,7 +195,7 @@ impl Widget for Login {
                 self.prompt_font.auto_draw_text(
                     &mut buf.subdimensions((256 + w + 16, 24, width - 416 - 32, 64))?,
                     &ctx.bg,
-                    &Color::new(1.0, 1.0, 1.0, 1.0),
+                    &ctx.config.prompt,
                     &format!("{}", self.answer),
                 )?;
             }
@@ -212,7 +207,7 @@ impl Widget for Login {
                 self.prompt_font.auto_draw_text(
                     &mut buf.subdimensions((256 + w + 16, 24, width - 416 - 32, 64))?,
                     &ctx.bg,
-                    &Color::new(1.0, 1.0, 1.0, 1.0),
+                    &ctx.config.prompt,
                     &stars,
                 )?;
             }
@@ -223,19 +218,14 @@ impl Widget for Login {
             self.prompt_font.auto_draw_text(
                 &mut buf.offset((256, 64))?,
                 &ctx.bg,
-                &Color::new(1.0, 1.0, 1.0, 1.0),
+                &ctx.config.prompt_err,
                 &self.error,
             )?;
         }
 
-        if self.reset_border {
-            self.border = Color::new(1.0, 1.0, 1.0, 1.0);
-            self.reset_border = false;
-        }
-
         Ok(DrawReport {
-            width: width,
-            height: height,
+            width,
+            height,
             damage: vec![buf.get_signed_bounds()],
             full_damage: false,
         })
