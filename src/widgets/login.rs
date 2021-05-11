@@ -119,6 +119,7 @@ impl Login {
                 auth_message_type,
             } => {
                 self.question = auth_message;
+                self.question.make_ascii_lowercase();
                 self.mode = Some(auth_message_type);
             }
             Response::Success => {
@@ -159,7 +160,7 @@ impl Login {
 
 impl Widget for Login {
     fn size(&self) -> (u32, u32) {
-        (1024, 128)
+        (512, 176)
     }
 
     fn draw(
@@ -177,14 +178,14 @@ impl Widget for Login {
         draw_box(&mut buf, &ctx.config.border, (width, height))?;
 
         self.headline_font.auto_draw_text(
-            &mut buf.offset((32, 24))?,
+            &mut buf.offset((168, 16))?,
             &ctx.bg,
             &ctx.config.headline,
             "Login",
         )?;
 
         let (w, _) = self.prompt_font.auto_draw_text(
-            &mut buf.offset((256, 24))?,
+            &mut buf.offset((24, 112))?,
             &ctx.bg,
             &ctx.config.prompt,
             &self.question,
@@ -193,7 +194,7 @@ impl Widget for Login {
         match self.mode {
             None | Some(AuthMessageType::Visible) => {
                 self.prompt_font.auto_draw_text(
-                    &mut buf.subdimensions((256 + w + 16, 24, width - 416 - 32, 64))?,
+                    &mut buf.subdimensions((24 + w + 16, 112, width - (24 + w + 16) - 24, 64))?,
                     &ctx.bg,
                     &ctx.config.prompt,
                     &format!("{}", self.answer),
@@ -205,7 +206,7 @@ impl Widget for Login {
                     stars += "*";
                 }
                 self.prompt_font.auto_draw_text(
-                    &mut buf.subdimensions((256 + w + 16, 24, width - 416 - 32, 64))?,
+                    &mut buf.subdimensions((24 + w + 8, 112, width - (24 + w + 8) - 24, 64))?,
                     &ctx.bg,
                     &ctx.config.prompt,
                     &stars,
