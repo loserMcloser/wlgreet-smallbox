@@ -4,7 +4,7 @@ Raw wayland greeter for greetd, to be run under sway or similar. Note that cage 
 
 See the [wiki](https://man.sr.ht/~kennylevinsen/greetd) for FAQ, guides for common configurations, and troubleshooting information.
 
-![screenshot](https://git.sr.ht/~kennylevinsen/wlgreet/blob/master/assets/screenshot.jpg)
+![screenshot](https://github.com/loserMcloser/wlgreet-smallbox/blob/mainline/assets/screenshot.png)
 
 ## How to use
 
