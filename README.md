@@ -16,3 +16,7 @@ See the wiki.
 cargo build --release
 cp target/release/wlgreet /usr/local/bin/
 ```
+
+## How to discuss
+
+Go to #kennylevinsen @ irc.libera.chat to discuss, or use [~kennylevinsen/greetd-devel@lists.sr.ht](https://lists.sr.ht/~kennylevinsen/greetd-devel).
