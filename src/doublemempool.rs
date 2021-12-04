@@ -1,5 +1,6 @@
-use smithay_client_toolkit::utils::MemPool;
+use smithay_client_toolkit::shm::MemPool;
 use wayland_client::protocol::wl_shm;
+use wayland_client::{Attached, Main};
 
 pub struct DoubleMemPool {
     pool1: MemPool,
@@ -8,10 +9,10 @@ pub struct DoubleMemPool {
 }
 
 impl DoubleMemPool {
-    pub fn new(shm: &wl_shm::WlShm) -> ::std::io::Result<DoubleMemPool> {
+    pub fn new(shm: Main<wl_shm::WlShm>) -> ::std::io::Result<DoubleMemPool> {
         Ok(DoubleMemPool {
-            pool1: MemPool::new(shm, move || {})?,
-            pool2: MemPool::new(shm, move || {})?,
+            pool1: MemPool::new(Attached::from(shm.clone()), move |_| {})?,
+            pool2: MemPool::new(Attached::from(shm), move |_| {})?,
             switch: false,
         })
     }

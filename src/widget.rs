@@ -2,7 +2,7 @@ use crate::buffer::Buffer;
 use crate::color::Color;
 use crate::config::Config;
 use chrono::{DateTime, Local};
-pub use smithay_client_toolkit::keyboard::{KeyState, ModifiersState};
+pub use smithay_client_toolkit::seat::keyboard::{KeyState, ModifiersState};
 
 pub struct DrawContext<'a> {
     pub buf: &'a mut Buffer<'a>,

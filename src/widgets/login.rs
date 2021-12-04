@@ -5,7 +5,7 @@ use std::env;
 use std::error::Error;
 use std::os::unix::net::UnixStream;
 
-use smithay_client_toolkit::keyboard::keysyms;
+use smithay_client_toolkit::seat::keyboard::keysyms;
 
 use greetd_ipc::{codec::SyncCodec, AuthMessageType, ErrorType, Request, Response};
 

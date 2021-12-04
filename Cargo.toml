@@ -11,16 +11,16 @@ lto = "fat"
 damage_debug = []
 
 [dependencies]
-smithay-client-toolkit = "0.6.4"
+smithay-client-toolkit = "0.15.2"
 rusttype = "0.7"
 chrono = "0.4"
 nix = "0.15"
-memmap = "0.7"
+memmap2 = "0.3"
 os_pipe = "0.8"
-wayland-client = { version = "0.23", features = ["dlopen"] }
-wayland-protocols = { version = "0.23", features = ["client", "unstable_protocols"] }
+wayland-client = { version = "0.29", features = ["dlopen"] }
+wayland-protocols = { version = "0.29", features = ["client", "unstable_protocols"] }
 lazy_static = "1.4"
 serde = { version = "1.0", features = ["derive"] }
-greetd_ipc = { version = "0.6", features = ["sync-codec"] }
+greetd_ipc = { version = "0.8", features = ["sync-codec"] }
 getopts = "0.2"
 toml = "0.5"

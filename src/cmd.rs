@@ -1,4 +1,4 @@
-use smithay_client_toolkit::keyboard::{KeyState, ModifiersState};
+use smithay_client_toolkit::seat::keyboard::{KeyState, ModifiersState};
 
 pub enum Cmd {
     Exit,

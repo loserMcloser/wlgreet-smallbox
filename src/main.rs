@@ -38,7 +38,7 @@ fn main() {
         });
 
     let mut fds = [
-        PollFd::new(app.event_queue().get_connection_fd(), PollFlags::POLLIN),
+        PollFd::new(app.display().get_connection_fd(), PollFlags::POLLIN),
         PollFd::new(rx_pipe.as_raw_fd(), PollFlags::POLLIN),
     ];
 
@@ -97,7 +97,7 @@ fn main() {
                     }
 
                     app.event_queue()
-                        .dispatch_pending()
+                        .dispatch_pending(&mut (), |_, _, _| {})
                         .expect("Failed to dispatch all messages.");
                 }
 

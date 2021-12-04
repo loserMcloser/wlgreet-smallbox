@@ -4,12 +4,16 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Local;
 
-use smithay_client_toolkit::keyboard::{
-    keysyms, map_keyboard_auto, Event as KbEvent, KeyState, ModifiersState,
+use smithay_client_toolkit::environment::MultiGlobalHandler;
+use smithay_client_toolkit::seat::{
+    keyboard::{keysyms, map_keyboard, Event as KbEvent, KeyState, ModifiersState},
+    SeatHandler,
 };
 
 use wayland_client::protocol::{wl_compositor, wl_output, wl_pointer, wl_shm, wl_surface};
-use wayland_client::{Display, EventQueue, GlobalEvent, GlobalManager, NewProxy};
+use wayland_client::{
+    Attached, DispatchData, Display, EventQueue, GlobalEvent, GlobalManager, Main,
+};
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::{
     zwlr_layer_shell_v1, zwlr_layer_surface_v1,
 };
@@ -23,12 +27,13 @@ use crate::cmd::Cmd;
 use crate::doublemempool::DoubleMemPool;
 
 struct AppInner {
-    compositor: Option<wl_compositor::WlCompositor>,
+    compositor: Option<Main<wl_compositor::WlCompositor>>,
     surfaces: Vec<wl_surface::WlSurface>,
     shell_surfaces: Vec<zwlr_layer_surface_v1::ZwlrLayerSurfaceV1>,
     configured_surfaces: Arc<Mutex<usize>>,
-    outputs: Vec<(u32, wl_output::WlOutput)>,
-    shell: Option<zwlr_layer_shell_v1::ZwlrLayerShellV1>,
+    outputs: Vec<(u32, Attached<wl_output::WlOutput>)>,
+    shell: Option<Main<zwlr_layer_shell_v1::ZwlrLayerShellV1>>,
+    seats: SeatHandler,
     draw_tx: Sender<Cmd>,
     output_mode: OutputMode,
     visible: bool,
@@ -44,6 +49,7 @@ impl AppInner {
             configured_surfaces: Arc::new(Mutex::new(0)),
             outputs: Vec::new(),
             shell: None,
+            seats: SeatHandler::new(),
             draw_tx: tx,
             output_mode: output_mode,
             visible: true,
@@ -62,43 +68,35 @@ impl AppInner {
         wl_surface::WlSurface,
         zwlr_layer_surface_v1::ZwlrLayerSurfaceV1,
     ) {
-        let surface = compositor
-            .create_surface(NewProxy::implement_dummy)
-            .unwrap();
+        let surface = compositor.create_surface();
 
         let this_is_stupid = Arc::new(Mutex::new(false));
 
-        let shell_surface = shell
-            .get_layer_surface(
-                &surface,
-                output,
-                zwlr_layer_shell_v1::Layer::Overlay,
-                "".to_string(),
-                move |layer| {
-                    layer.implement_closure(
-                        move |evt, layer| match evt {
-                            zwlr_layer_surface_v1::Event::Configure { serial, .. } => {
-                                let mut x = this_is_stupid.lock().unwrap();
-                                if !*x {
-                                    *x = true;
-                                    *(configured_surfaces.lock().unwrap()) += 1;
-                                    layer.ack_configure(serial);
-                                    tx.send(Cmd::ForceDraw).unwrap();
-                                }
-                            }
-                            _ => unreachable!(),
-                        },
-                        (),
-                    )
-                },
-            )
-            .unwrap();
+        let shell_surface = shell.get_layer_surface(
+            &surface,
+            output,
+            zwlr_layer_shell_v1::Layer::Overlay,
+            "".to_string(),
+        );
+        shell_surface.quick_assign(move |layer, evt, _| match evt {
+            zwlr_layer_surface_v1::Event::Configure { serial, .. } => {
+                let mut x = this_is_stupid.lock().unwrap();
+                if !*x {
+                    *x = true;
+                    *(configured_surfaces.lock().unwrap()) += 1;
+                    layer.ack_configure(serial);
+                    tx.send(Cmd::ForceDraw).unwrap();
+                }
+            }
+            _ => unreachable!(),
+        });
 
-        shell_surface.set_keyboard_interactivity(1);
+        shell_surface
+            .set_keyboard_interactivity(zwlr_layer_surface_v1::KeyboardInteractivity::Exclusive);
         shell_surface.set_size(1, 1);
         surface.set_buffer_scale(scale as i32);
         surface.commit();
-        (surface, shell_surface)
+        (surface.detach(), shell_surface.detach())
     }
 
     fn outputs_changed(&mut self) {
@@ -163,7 +161,7 @@ impl AppInner {
         }
     }
 
-    fn add_output(&mut self, id: u32, output: wl_output::WlOutput) {
+    fn add_output(&mut self, id: u32, output: Attached<wl_output::WlOutput>) {
         self.outputs.push((id, output));
         self.outputs_changed();
     }
@@ -185,11 +183,11 @@ impl AppInner {
         }
     }
 
-    fn set_compositor(&mut self, compositor: Option<wl_compositor::WlCompositor>) {
+    fn set_compositor(&mut self, compositor: Option<Main<wl_compositor::WlCompositor>>) {
         self.compositor = compositor
     }
 
-    fn set_shell(&mut self, shell: Option<zwlr_layer_shell_v1::ZwlrLayerShellV1>) {
+    fn set_shell(&mut self, shell: Option<Main<zwlr_layer_shell_v1::ZwlrLayerShellV1>>) {
         self.shell = shell
     }
 }
@@ -312,6 +310,10 @@ impl App {
         self.cmd_queue.clone()
     }
 
+    pub fn display(&mut self) -> &mut Display {
+        &mut self.display
+    }
+
     pub fn flush_display(&mut self) {
         self.display.flush().expect("unable to flush display");
     }
@@ -342,49 +344,59 @@ impl App {
 
         let cmd_queue = Arc::new(Mutex::new(VecDeque::new()));
 
-        let (display, mut event_queue) = Display::connect_to_env().unwrap();
+        let display = Display::connect_to_env().unwrap();
 
-        let display_wrapper = display
-            .as_ref()
-            .make_wrapper(&event_queue.get_token())
-            .unwrap()
-            .into();
+        let mut event_queue = display.create_event_queue();
 
         //
-        // Set up global manager
+        // Set up global manager and get seats
         //
         let inner_global = inner.clone();
-        let manager =
-            GlobalManager::new_with_cb(&display_wrapper, move |event, registry| match event {
+        let manager = GlobalManager::new_with_cb(
+            &display.attach(event_queue.token()),
+            move |evt, registry, ddata: DispatchData| match evt {
                 GlobalEvent::New {
                     id,
                     ref interface,
                     version,
                 } => {
                     if let "wl_output" = &interface[..] {
-                        let output = registry
-                            .bind(version, id, move |output| {
-                                output.implement_closure(move |_, _| {}, ())
-                            })
-                            .unwrap();
-                        inner_global.lock().unwrap().add_output(id, output);
+                        let output = registry.bind::<wl_output::WlOutput>(version, id);
+                        output.quick_assign(move |_, _, _| {});
+                        inner_global
+                            .lock()
+                            .unwrap()
+                            .add_output(id, (*output).clone());
+                    } else if let "wl_seat" = &interface[..] {
+                        inner_global
+                            .lock()
+                            .unwrap()
+                            .seats
+                            .created(registry, id, version, ddata);
                     }
                 }
                 GlobalEvent::Removed { id, ref interface } => {
                     if let "wl_output" = &interface[..] {
                         inner_global.lock().unwrap().remove_output(id);
+                    } else if let "wl_seat" = &interface[..] {
+                        inner_global.lock().unwrap().seats.removed(id, ddata);
                     }
                 }
-            });
+            },
+        );
 
         // double sync to retrieve the global list
         // and the globals metadata
-        event_queue.sync_roundtrip().unwrap();
-        event_queue.sync_roundtrip().unwrap();
+        event_queue
+            .sync_roundtrip(&mut (), |_, _, _| unreachable!())
+            .unwrap();
+        event_queue
+            .sync_roundtrip(&mut (), |_, _, _| unreachable!())
+            .unwrap();
 
         // wl_compositor
-        let compositor: wl_compositor::WlCompositor = manager
-            .instantiate_range(1, 4, NewProxy::implement_dummy)
+        let compositor: Main<wl_compositor::WlCompositor> = manager
+            .instantiate_range(1, 4)
             .expect("server didn't advertise `wl_compositor`");
 
         inner.lock().unwrap().set_compositor(Some(compositor));
@@ -393,74 +405,62 @@ impl App {
         let shm_formats = Arc::new(Mutex::new(Vec::new()));
         let shm_formats2 = shm_formats.clone();
         let shm = manager
-            .instantiate_range(1, 1, |shm| {
-                shm.implement_closure(
-                    move |evt, _| {
-                        if let wl_shm::Event::Format { format } = evt {
-                            shm_formats2.lock().unwrap().push(format);
-                        }
-                    },
-                    (),
-                )
-            })
+            .instantiate_range::<wl_shm::WlShm>(1, 1)
             .expect("server didn't advertise `wl_shm`");
+        shm.quick_assign(move |_, evt, _| {
+            if let wl_shm::Event::Format { format } = evt {
+                shm_formats2.lock().unwrap().push(format);
+            }
+        });
 
-        let pools = DoubleMemPool::new(&shm).expect("Failed to create a memory pool !");
-
-        //
-        // Get our seat
-        //
-        let seat = manager
-            .instantiate_range(1, 6, NewProxy::implement_dummy)
-            .unwrap();
+        let pools = DoubleMemPool::new(shm).expect("Failed to create a memory pool !");
 
         //
         // Keyboard processing
         //
-        let kbd_clone = cmd_queue.clone();
-        let modifiers_state = Arc::new(Mutex::new(ModifiersState {
-            ctrl: false,
-            alt: false,
-            shift: false,
-            caps_lock: false,
-            logo: false,
-            num_lock: false,
-        }));
-        map_keyboard_auto(&seat, move |event: KbEvent, _| match event {
-            KbEvent::Key {
-                keysym,
-                utf8,
-                state,
-                ..
-            } => match state {
-                KeyState::Pressed => match keysym {
-                    keysyms::XKB_KEY_c if modifiers_state.lock().unwrap().ctrl => {
-                        kbd_clone.lock().unwrap().push_back(Cmd::Exit)
-                    }
-                    v => kbd_clone.lock().unwrap().push_back(Cmd::Keyboard {
-                        key: v,
-                        key_state: state,
-                        modifiers_state: modifiers_state.lock().unwrap().clone(),
-                        interpreted: utf8,
-                    }),
+        for seat in inner.lock().unwrap().seats.get_all() {
+            let kbd_clone = cmd_queue.clone();
+            let modifiers_state = Arc::new(Mutex::new(ModifiersState {
+                ctrl: false,
+                alt: false,
+                shift: false,
+                caps_lock: false,
+                logo: false,
+                num_lock: false,
+            }));
+            map_keyboard(&seat, None, move |event: KbEvent, _, _| match event {
+                KbEvent::Key {
+                    keysym,
+                    utf8,
+                    state,
+                    ..
+                } => match state {
+                    KeyState::Pressed => match keysym {
+                        keysyms::XKB_KEY_c if modifiers_state.lock().unwrap().ctrl => {
+                            kbd_clone.lock().unwrap().push_back(Cmd::Exit)
+                        }
+                        v => kbd_clone.lock().unwrap().push_back(Cmd::Keyboard {
+                            key: v,
+                            key_state: state,
+                            modifiers_state: modifiers_state.lock().unwrap().clone(),
+                            interpreted: utf8,
+                        }),
+                    },
+                    _ => (),
                 },
+                KbEvent::Modifiers { modifiers } => *modifiers_state.lock().unwrap() = modifiers,
                 _ => (),
-            },
-            KbEvent::Modifiers { modifiers } => *modifiers_state.lock().unwrap() = modifiers,
-            _ => (),
-        })
-        .expect("Failed to map keyboard");
+            })
+            .expect("Failed to map keyboard");
+        }
 
         //
         // Prepare shell so that we can create our shell surface
         //
         inner.lock().unwrap().set_shell(Some(
-            if let Ok(layer) = manager.instantiate_exact(
-                1,
-                |layer: NewProxy<zwlr_layer_shell_v1::ZwlrLayerShellV1>| {
-                    layer.implement_closure(|_, _| {}, ())
-                },
-            ) {
+            if let Ok(layer) = manager.instantiate_exact::<zwlr_layer_shell_v1::ZwlrLayerShellV1>(1)
+            {
+                layer.quick_assign(move |_, _, _| {});
                 layer
             } else {
                 panic!("server didn't advertise `zwlr_layer_shell_v1`");
@@ -468,73 +468,72 @@ impl App {
         ));
 
         inner.lock().unwrap().outputs_changed();
-        event_queue.sync_roundtrip().unwrap();
+        event_queue
+            .sync_roundtrip(&mut (), |_, _, _| unreachable!())
+            .unwrap();
 
         //
         // Cursor processing
         //
-        let scale = config.scale;
-        let pointer_clone = cmd_queue.clone();
-        seat.get_pointer(move |ptr| {
+        for seat in inner.lock().unwrap().seats.get_all() {
+            let scale = config.scale;
+            let pointer_clone = cmd_queue.clone();
             let mut pos: (u32, u32) = (0, 0);
             let mut vert_scroll: f64 = 0.0;
             let mut horiz_scroll: f64 = 0.0;
             let mut btn: u32 = 0;
             let mut btn_clicked = false;
-            ptr.implement_closure(
-                move |evt, _| match evt {
-                    wl_pointer::Event::Enter {
-                        surface_x,
-                        surface_y,
-                        ..
-                    } => {
-                        pos = (surface_x as u32, surface_y as u32);
+            let pointer = seat.get_pointer();
+            pointer.quick_assign(move |_, evt, _| match evt {
+                wl_pointer::Event::Enter {
+                    surface_x,
+                    surface_y,
+                    ..
+                } => {
+                    pos = (surface_x as u32, surface_y as u32);
+                }
+                wl_pointer::Event::Leave { .. } => {
+                    pos = (0, 0);
+                }
+                wl_pointer::Event::Motion {
+                    surface_x,
+                    surface_y,
+                    ..
+                } => {
+                    pos = (surface_x as u32 * scale, surface_y as u32 * scale);
+                }
+                wl_pointer::Event::Axis { axis, value, .. } => {
+                    if axis == wl_pointer::Axis::VerticalScroll {
+                        vert_scroll += value;
                     }
-                    wl_pointer::Event::Leave { .. } => {
-                        pos = (0, 0);
-                    }
-                    wl_pointer::Event::Motion {
-                        surface_x,
-                        surface_y,
-                        ..
-                    } => {
-                        pos = (surface_x as u32 * scale, surface_y as u32 * scale);
-                    }
-                    wl_pointer::Event::Axis { axis, value, .. } => {
-                        if axis == wl_pointer::Axis::VerticalScroll {
-                            vert_scroll += value;
-                        }
-                    }
-                    wl_pointer::Event::Button { button, state, .. } => match state {
-                        wl_pointer::ButtonState::Released => {
-                            btn = button;
-                            btn_clicked = true;
-                        }
-                        _ => {}
-                    },
-                    wl_pointer::Event::Frame => {
-                        if vert_scroll != 0.0 || horiz_scroll != 0.0 {
-                            pointer_clone.lock().unwrap().push_back(Cmd::MouseScroll {
-                                scroll: (horiz_scroll, vert_scroll),
-                                pos: pos,
-                            });
-                            vert_scroll = 0.0;
-                            horiz_scroll = 0.0;
-                        }
-                        if btn_clicked {
-                            pointer_clone
-                                .lock()
-                                .unwrap()
-                                .push_back(Cmd::MouseClick { btn: btn, pos: pos });
-                            btn_clicked = false;
-                        }
+                }
+                wl_pointer::Event::Button { button, state, .. } => match state {
+                    wl_pointer::ButtonState::Released => {
+                        btn = button;
+                        btn_clicked = true;
                     }
                     _ => {}
                 },
-                (),
-            )
-        })
-        .unwrap();
+                wl_pointer::Event::Frame => {
+                    if vert_scroll != 0.0 || horiz_scroll != 0.0 {
+                        pointer_clone.lock().unwrap().push_back(Cmd::MouseScroll {
+                            scroll: (horiz_scroll, vert_scroll),
+                            pos: pos,
+                        });
+                        vert_scroll = 0.0;
+                        horiz_scroll = 0.0;
+                    }
+                    if btn_clicked {
+                        pointer_clone
+                            .lock()
+                            .unwrap()
+                            .push_back(Cmd::MouseClick { btn: btn, pos: pos });
+                        btn_clicked = false;
+                    }
+                }
+                _ => {}
+            });
+        }
 
         display.flush().unwrap();
 
