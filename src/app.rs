@@ -361,7 +361,7 @@ impl App {
                     version,
                 } => {
                     if let "wl_output" = &interface[..] {
-                        let output = registry.bind::<wl_output::WlOutput>(version, id);
+                        let output = registry.bind::<wl_output::WlOutput>(std::cmp::min(version, 3), id);
                         output.quick_assign(move |_, _, _| {});
                         inner_global
                             .lock()
