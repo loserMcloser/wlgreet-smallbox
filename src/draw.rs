@@ -12,10 +12,10 @@ pub static ROBOTO_REGULAR_FONT_DATA: &'static [u8] = include_bytes!("../fonts/Ro
 
 lazy_static! {
     pub static ref DEJAVUSANS_MONO: RustFont<'static> =
-        RustFont::from_bytes(DEJAVUSANS_MONO_FONT_DATA as &[u8])
+        RustFont::try_from_bytes(DEJAVUSANS_MONO_FONT_DATA as &[u8])
             .expect("error constructing DejaVuSansMono");
     pub static ref ROBOTO_REGULAR: RustFont<'static> =
-        RustFont::from_bytes(ROBOTO_REGULAR_FONT_DATA as &[u8])
+        RustFont::try_from_bytes(ROBOTO_REGULAR_FONT_DATA as &[u8])
             .expect("error constructing Roboto-Regular");
 }
 

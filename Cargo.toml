@@ -12,15 +12,15 @@ damage_debug = []
 
 [dependencies]
 smithay-client-toolkit = "0.15.2"
-rusttype = "0.7"
+rusttype = "0.9"
 chrono = "0.4"
-nix = "0.15"
+nix = "0.25"
 memmap2 = "0.3"
-os_pipe = "0.8"
-wayland-client = { version = "0.29", features = ["dlopen"] }
+os_pipe = "1.1"
+wayland-client = { version = "0.29" }
 wayland-protocols = { version = "0.29", features = ["client", "unstable_protocols"] }
 lazy_static = "1.4"
 serde = { version = "1.0", features = ["derive"] }
-greetd_ipc = { version = "0.8", features = ["sync-codec"] }
+greetd_ipc = { version = "0.9", features = ["sync-codec"] }
 getopts = "0.2"
 toml = "0.5"
