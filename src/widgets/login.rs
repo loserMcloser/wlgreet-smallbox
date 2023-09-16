@@ -262,7 +262,11 @@ impl Widget for Login {
                 self.dirty = true;
             }
             keysyms::XKB_KEY_BackSpace => {
-                self.answer.truncate(self.answer.len().saturating_sub(1));
+                if modifiers.ctrl {
+                    self.answer.clear();
+                } else {
+                    self.answer.truncate(self.answer.len().saturating_sub(1));
+                }
                 self.dirty = true;
             }
             keysyms::XKB_KEY_Return => match self.answer.chars().next() {
