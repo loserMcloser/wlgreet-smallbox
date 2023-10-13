@@ -269,7 +269,7 @@ impl Widget for Login {
                 }
                 self.dirty = true;
             }
-            keysyms::XKB_KEY_Return => match self.answer.chars().next() {
+            keysyms::XKB_KEY_Return | keysyms::XKB_KEY_Tab => match self.answer.chars().next() {
                 Some('!') => {
                     self.error =
                         format!("Command set to: {}", self.answer[1..].to_string()).to_string();
