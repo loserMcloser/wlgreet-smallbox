@@ -470,7 +470,7 @@ impl App {
 
         inner.lock().unwrap().outputs_changed();
         event_queue
-            .sync_roundtrip(&mut (), |_, _, _| unreachable!())
+            .sync_roundtrip(&mut (), |_, _, _| () )
             .unwrap();
 
         //
